@@ -42,35 +42,25 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v2
-        
-      - name: Clone
-        run: |
-          git clone --branch gh-pages https://github.com/arrudagates/stargate_randomizer
-          git fetch -a
-          git pull
-        
+ 
       - uses: actions/download-artifact@v2
         with:
           name: static
       
-      - name: Commit files
+      - name: Init new repo in dist folder and commit generated files
         run: |
-          git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git config --local user.name "github-actions[bot]"
-          git pull
-          git commit -m "Deploy website" -a
-          git pull
-      - name: Push changes
-        uses: ad-m/github-push-action@master
+          cd ./static
+          git init
+          git add -A
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git commit -m 'deploy github pages'
+
+      - name: Force push to destination branch
+        uses: ad-m/github-push-action@v0.5.0
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
+          # this might change depending on whether you are publishing a site for a normal repo or a user/organization repo
           branch: gh-pages
-      
-      - name: Deploy to GitHub Pages
-        if: success()
-        uses: crazy-max/ghaction-github-pages@v2
-        with:
-          target_branch: gh-pages
-          build_dir: static
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          force: true
+          directory: ./static
