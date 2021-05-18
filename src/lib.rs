@@ -1,6 +1,8 @@
-#![recursion_limit = "256"]
+#![recursion_limit = "512"]
 
-use rand::{thread_rng, Rng};
+use std::{env, fmt::Display};
+
+use rand::{prelude::SliceRandom, thread_rng, Rng};
 use serde::Deserialize;
 use wasm_bindgen::prelude::*;
 use yew::services::{
@@ -15,7 +17,7 @@ use yew::{prelude::*, services::console};
 
 struct Model {
     link: ComponentLink<Self>,
-    current_episode: (i32, i32),
+    current_episode: (Shows, i32, i32),
     sg1: bool,
     atlantis: bool,
     universe: bool,
@@ -27,20 +29,31 @@ struct Model {
 enum Msg {
     GetRandom,
     Toggle(Shows),
-    ReceiveResponse(Result<Vec<Episode>, anyhow::Error>),
+    ReceiveResponse(Result<Episode, anyhow::Error>),
 }
 
+#[derive(Copy, Clone)]
 enum Shows {
     SG1,
     Atlantis,
     Universe,
 }
 
+impl Display for Shows {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Shows::SG1 => write!(f, "SG-1"),
+            Shows::Atlantis => write!(f, "Atlantis"),
+            Shows::Universe => write!(f, "Universe"),
+        }
+    }
+}
+
 #[derive(Deserialize, Debug, Clone)]
 struct Episode {
-    title: String,
+    name: String,
     overview: String,
-    language: String,
+    still_path: Option<String>,
 }
 
 impl Model {
@@ -49,8 +62,26 @@ impl Model {
             Some(episode) => {
                 html! {
                     <>
-                        <p>{ format!("Title: {}", episode.title) }</p>
-                        <p>{ format!("Overview: {}", episode.overview) }</p>
+                        <div class="card" style="max-width: 40%; height: 70vh; display: flex; flex-direction: column;">
+                        <div class="card-image">
+                        <figure class="image">
+                        <img src=format!("https://image.tmdb.org/t/p/w500{}", if let Some(still) = &episode.still_path {still} else {""}) alt="Placeholder image"/>
+                        </figure>
+                        </div>
+                        <div class="card-content" style="display: flex; flex-direction: column; flex: 1;">
+                        <div class="media">
+                        <div class="media-content">
+                        <p class="title is-4">{&episode.name}</p>
+                        </div>
+                        </div>
+
+                        <div class="content" style="font-size: 19px; display: flex; flex-direction: column; justify-content: space-between; flex: 1;">
+                    {&episode.overview}
+                        <br/>
+                        <p>{format!("Stargate {}, Season: {}, Episode: {}", self.current_episode.0, self.current_episode.1, self.current_episode.2)}</p>
+                        </div>
+                        </div>
+                        </div>
                     </>
                 }
             }
@@ -87,7 +118,7 @@ impl Component for Model {
             sg1: true,
             atlantis: false,
             universe: false,
-            current_episode: (0, 0),
+            current_episode: (Shows::SG1, 0, 0),
             fetch_task: None,
             episode: None,
             error: None,
@@ -97,33 +128,69 @@ impl Component for Model {
     fn update(&mut self, msg: Self::Message) -> ShouldRender {
         match msg {
             Msg::GetRandom => {
+                let key: &str = env!("TMDB_KEY");
                 let mut rng = thread_rng();
-                let season = rng.gen_range(1..10);
-                let episode = match season.clone() {
-                    1 => (season, rng.gen_range(1..21)),
-                    2 | 3 | 4 | 5 | 6 | 7 => (season, rng.gen_range(1..22)),
-                    8 | 9 | 10 => (season, rng.gen_range(1..20)),
-                    _ => (0, 0),
+                let mut show = vec![];
+                if self.sg1 {
+                    show.push(Shows::SG1)
+                }
+                if self.atlantis {
+                    show.push(Shows::Atlantis)
+                }
+                if self.universe {
+                    show.push(Shows::Universe)
+                }
+                show.shuffle(&mut rng);
+                let show = show[0];
+                let season = match show {
+                    Shows::SG1 => rng.gen_range(1..10),
+                    Shows::Atlantis => rng.gen_range(1..5),
+                    Shows::Universe => rng.gen_range(1..2),
+                };
+                let episode = match (show, season.clone()) {
+                    (Shows::SG1, 1) => (show, season, rng.gen_range(1..21)),
+                    (Shows::SG1, 2)
+                    | (Shows::SG1, 3)
+                    | (Shows::SG1, 4)
+                    | (Shows::SG1, 5)
+                    | (Shows::SG1, 6)
+                    | (Shows::SG1, 7) => (show, season, rng.gen_range(1..22)),
+                    (Shows::SG1, 8)
+                    | (Shows::SG1, 9)
+                    | (Shows::SG1, 10)
+                    | (Shows::Atlantis, 2)
+                    | (Shows::Atlantis, 3)
+                    | (Shows::Atlantis, 4)
+                    | (Shows::Atlantis, 5)
+                    | (Shows::Universe, _) => (show, season, rng.gen_range(1..20)),
+                    (Shows::Atlantis, 1) => (show, season, rng.gen_range(1..19)),
+                    _ => (Shows::SG1, 0, 0),
                 };
                 self.current_episode = episode;
                 console::ConsoleService::log(
-                    format!("Season: {}, episode: {}", episode.0, episode.1).as_str(),
+                    format!(
+                        "Show: {}, Season: {}, episode: {}",
+                        episode.0, episode.1, episode.2
+                    )
+                    .as_str(),
                 );
 
                 let request = Request::get(format!(
-                    "https://api.trakt.tv/shows/tt0118480/seasons/{}/episodes/{}/translations/en",
-                    episode.0, episode.1
+                    "https://api.themoviedb.org/3/tv/{}/season/{}/episode/{}?api_key={}&language=en-US",
+                    match episode.0 {
+                        Shows::SG1 => "4629",
+                        Shows::Atlantis => "2290",
+                        Shows::Universe => "5148",
+                    },
+                    episode.1,
+                    episode.2,
+                    key
                 ))
-                .header(
-                    "trakt-api-key",
-                    "838d2d9cb16844abe679e743052404feec745399649976ba725e04927986a73c", // this is the client id, not the client secret
-                )
-                .header("trakt-api-version", 2)
                 .body(Nothing)
                 .expect("Could not build request.");
 
                 let callback = self.link.callback(
-                    |response: Response<Json<Result<Vec<Episode>, anyhow::Error>>>| {
+                    |response: Response<Json<Result<Episode, anyhow::Error>>>| {
                         let Json(data) = response.into_body();
                         Msg::ReceiveResponse(data)
                     },
@@ -138,7 +205,7 @@ impl Component for Model {
             Msg::ReceiveResponse(response) => {
                 match response {
                     Ok(episode) => {
-                        self.episode = Some(episode.first().unwrap().to_owned());
+                        self.episode = Some(episode);
                     }
                     Err(error) => self.error = Some(error),
                 }
@@ -163,43 +230,53 @@ impl Component for Model {
 
     fn view(&self) -> Html {
         html! {
-                <div class="app">
-                    <header class="app-header">
+            <div class="app">
+                <header class="app-header">
+                <div style="flex: 1;">
+                <h1 class="title" style="color: white; padding-top: 10px">
+            { "Stargate Randomizer" }
+            </h1>
 
+                <nav class="level">
+                <div class="level-item has-text-centered" style="margin: 10px;">
             <label class="checkbox">
                     <input type="checkbox"
                     onclick= self.link.callback(|_| Msg::Toggle(Shows::SG1))
             checked= self.sg1                        />
         {"SG-1"}
-        </label>
+            </label>
+                </div>
 
+                <div class="level-item has-text-centered" style="margin: 10px;">
             <label class="checkbox">
                     <input type="checkbox"
                     onclick=self.link.callback(|_| Msg::Toggle(Shows::Atlantis))
             checked= self.atlantis
             />
         {"Atlantis"}
-        </label>
+            </label>
+                </div>
 
+                <div class="level-item has-text-centered" style="margin: 10px;">
             <label class="checkbox">
                     <input type="checkbox"
                     onclick= self.link.callback(|_| Msg::Toggle(Shows::Universe))
             checked= self.universe
             />
         {"Universe"}
-        </label>
-                             <p>
-                    { "Stargate Randomizer" }
-             </p>
+            </label>
+                </div>
+                </nav>
+                </div>
+
 
             { self.view_fetching() }
             { self.view_episode() }
             { self.view_error() }
 
-                    <div>
+                    <div style="flex: 1;">
                     <button onclick=self.link.callback(|_| Msg::GetRandom)>{ "Jaunt through the orifice" }</button>
-                    <p>{ format!("Season {}, Episode: {}", self.current_episode.0, self.current_episode.1) }</p>
-                    </div>
+                   </div>
 
                     </header>
                     </div>
