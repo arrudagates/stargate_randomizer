@@ -57,7 +57,9 @@ jobs:
         run: |
           git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
+          git pull
           git commit -m "Deploy website" -a
+          git pull
       - name: Push changes
         uses: ad-m/github-push-action@master
         with:
