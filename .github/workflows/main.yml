@@ -31,12 +31,22 @@ jobs:
       - name: "wasm-pack"
         run: wasm-pack build --target web --out-name wasm --out-dir ./static
         
+      - uses: actions/upload-artifact@master
+        with:
+          name: static
+          path: ./static/
+        
   publish:
     needs: build
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v2
+
+      - uses: actions/download-artifact@master
+        with:
+          name: static
+          path: ./static
 
       - name: Deploy to GitHub Pages
         if: success()
