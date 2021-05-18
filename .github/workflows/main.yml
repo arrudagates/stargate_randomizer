@@ -44,7 +44,10 @@ jobs:
         uses: actions/checkout@v2
         
       - name: Clone
-        run: git clone --branch gh-pages https://github.com/arrudagates/stargate_randomizer
+        run: |
+          git clone --branch gh-pages https://github.com/arrudagates/stargate_randomizer
+          git fetch -a
+          git pull
         
       - uses: actions/download-artifact@v2
         with:
