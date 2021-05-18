@@ -49,7 +49,6 @@ jobs:
           github_token: ${{secrets.GITHUB_TOKEN}}
           workflow: main.yml
           name: static
-          branch: gh-pages
           path: ./
       
       - name: Commit files
