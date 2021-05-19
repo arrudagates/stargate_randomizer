@@ -25,14 +25,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v2
         
-      - name: Using Variables
-        env:
-          TMDB_KEY: ${{ secrets.TMDB_KEY }}
-        
       - uses: jetli/wasm-pack-action@v0.3.0
         with:
           version: 'latest'
       - name: "wasm-pack"
+        env:
+          TMDB_KEY: ${{ secrets.TMDB_KEY }}
         run: wasm-pack build --target web --out-name wasm --out-dir ./static
         
       - uses: actions/upload-artifact@master
